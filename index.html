@@ -144,22 +144,27 @@ body {
 .nav-side.left { justify-self: start; }
 .nav-side.right { justify-self: end; }
 
+/* 头像在上、名字在下：头像跨满一行，名字与箭头排第二行 */
 .nav-center {
   justify-self: center;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto;
   align-items: center;
-  gap: 7px;
+  justify-items: center;
+  row-gap: 1px;
+  column-gap: 4px;
   background: transparent;
   border: none;
   color: #fff;
   cursor: pointer;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: 10px;
   max-width: 100%;
   font-family: inherit;
 }
 .nav-center:active { background: rgba(255,255,255,.12); }
 .nav-avatar {
+  grid-column: 1 / -1;          /* 独占第一行 */
   width: 32px; height: 32px;
   border-radius: 50%;
   font-size: 15px;
@@ -168,19 +173,22 @@ body {
   background: #e9eef5;
   border: 1.5px solid rgba(255,255,255,.92);
   box-shadow: 0 1px 2px rgba(0,0,0,.35);
-  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
 }
-.nav-avatar img { border-radius: 50%; }
+.nav-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .nav-name {
-  font-size: 15px;
-  font-weight: 700;
-  max-width: 110px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  max-width: 96px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-shadow: 0 -1px 0 rgba(0,0,0,.34);
 }
-.caret { font-size: 10px; opacity: .85; margin-left: -2px; }
+.caret { font-size: 9px; opacity: .85; margin-left: 0; }
 
 /* 三个装饰按钮行 */
 .quick-actions {
@@ -1337,13 +1345,9 @@ const FOLDER_COLORS = [
   "#8e8e93"  // 灰
 ];
 
-// 预设梦角（只需名字与头像；头像留空则自动用姓名首字；color 用于头像文字色）
-const PRESET_CHARACTERS = [
-  { id: "c_lin", name: "林深", avatar: "", color: "#5b8def" },
-  { id: "c_gu", name: "顾屿", avatar: "", color: "#2f3640" },
-  { id: "c_ze", name: "阿泽", avatar: "", color: "#ff6b9d" },
-  { id: "c_shen", name: "沈言", avatar: "", color: "#26a69a" }
-];
+// 预设梦角：已全部清空，首次打开不自带任何梦角，由用户在「编辑」里自行添加
+// （梦角只需名字与头像；头像留空则自动用姓名首字；color 用于头像文字色）
+const PRESET_CHARACTERS = [];
 
 // 预设字卡库（默认 3 个文件夹，展示主题配色）
 const PRESET_FOLDERS = [
@@ -1523,18 +1527,37 @@ window.PRESET_FOLDERS = PRESET_FOLDERS;
     }
   }
 
+  // 旧版预设梦角 id：预设已清空，仅用于迁移时识别本地残留
+  const LEGACY_PRESET_IDS = ["c_lin", "c_gu", "c_ze", "c_shen"];
+
+  // 迁移：若本地剩下的梦角全是旧预设，就一并移除（字卡库与设置保留，用户自己加的梦角不动）
+  function dropLegacyCharacters() {
+    if (!state.characters.length) return;
+    const allLegacy = state.characters.every((c) => LEGACY_PRESET_IDS.indexOf(c.id) >= 0);
+    if (!allLegacy) return;
+    state.characters.forEach((c) => {
+      delete state.messages[c.id];
+      delete state.lastText[c.id];
+    });
+    state.characters = [];
+    state.activeId = null;
+    save();
+  }
+
   function initData() {
     try {
       const raw = localStorage.getItem(STORE_KEY);
       if (raw) {
         const d = JSON.parse(raw);
-        if (d && Array.isArray(d.characters) && d.characters.length && Array.isArray(d.folders)) {
+        // 允许梦角为空数组：用户删光之后不该被预设复活
+        if (d && Array.isArray(d.characters) && Array.isArray(d.folders)) {
           state.characters = d.characters;
-          state.activeId = d.activeId || d.characters[0].id;
+          state.activeId = d.activeId || (d.characters.length ? d.characters[0].id : null);
           state.messages = d.messages || {};
           state.folders = d.folders;
           state.lastText = d.lastText || {};
           state.settings = Object.assign({ randomCall: true }, d.settings || {});
+          dropLegacyCharacters();
           return;
         }
       }
@@ -1542,7 +1565,7 @@ window.PRESET_FOLDERS = PRESET_FOLDERS;
 
     state.characters = clone(window.PRESET_CHARACTERS);
     state.folders = clone(window.PRESET_FOLDERS);
-    state.activeId = state.characters[0].id;
+    state.activeId = state.characters.length ? state.characters[0].id : null;
     state.messages = {};
     state.lastText = {};
     state.settings = { randomCall: true };
@@ -1556,7 +1579,7 @@ window.PRESET_FOLDERS = PRESET_FOLDERS;
   function renderNav() {
     const c = getActive();
     if (!c) {
-      navAvatar.innerHTML = "";
+      navAvatar.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#9aa7b4" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>`;
       navName.textContent = "选择梦角";
       return;
     }
